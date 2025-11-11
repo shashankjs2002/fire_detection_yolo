@@ -1,0 +1,79 @@
+<!-- templates/client.html - Reverted to Frame-by-Frame Base64 Streaming -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Video Stream</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="bg-white p-8 rounded-lg shadow-md max-w-md w-full">
+        <h1 class="text-2xl font-bold mb-4 text-center">Client Video Stream</h1>
+        <div id="status" class="text-lg text-center mb-4 p-2 bg-blue-100 rounded">Requesting camera access...</div>
+        <video id="video" autoplay muted playsinline class="hidden"></video>
+        <canvas id="canvas" class="hidden"></canvas>
+        <div class="text-center mt-4">
+            <p class="text-sm text-gray-600">Your video is being streamed continuously to the server for monitoring.</p>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const status = document.getElementById('status');
+
+        let stream = null;
+        let animationId = null;
+        const FRAME_INTERVAL = 100;  // ms, ~10 fps to simulate continuous stream with lower load
+
+        function streamVideo() {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const frameData = canvas.toDataURL('image/jpeg', 0.8);
+            socket.emit('frame', { frame: frameData });
+            animationId = setTimeout(streamVideo, FRAME_INTERVAL);
+        }
+
+        navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                width: { ideal: 640 }, 
+                height: { ideal: 480 },
+                facingMode: 'user'  // Front camera preferred
+            } 
+        })
+        .then(mediaStream => {
+            stream = mediaStream;
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                status.textContent = 'Streaming frames continuously. Monitoring in progress...';
+                status.className = 'text-lg text-center mb-4 p-2 bg-green-100 rounded';
+                streamVideo();
+                socket.on('status', (data) => {
+                    status.textContent = data.msg;
+                });
+            };
+        })
+        .catch(err => {
+            console.error('Camera access error:', err);
+            status.textContent = `Error accessing camera: ${err.message}. Please allow camera permissions and refresh.`;
+            status.className = 'text-lg text-center mb-4 p-2 bg-red-100 rounded';
+        });
+
+        // Cleanup on disconnect
+        window.addEventListener('beforeunload', () => {
+            if (animationId) {
+                clearTimeout(animationId);
+            }
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            socket.disconnect();
+        });
+    </script>
+</body>
+</html>

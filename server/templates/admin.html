@@ -1,0 +1,117 @@
+<!-- templates/admin.html - Fixed Admin Panel: Removed cache-busting query param from data URI -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Monitoring Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body class="bg-gray-100 p-4">
+    <div class="max-w-7xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold">Admin Monitoring Panel</h1>
+            <div class="text-sm text-gray-600">
+                Active Clients: <span id="client-count">0</span>
+            </div>
+        </div>
+        
+        <div id="alerts" class="mb-4 p-4 bg-yellow-100 border-l-4 border-yellow-500 rounded hidden">
+            <p id="alert-msg" class="font-medium"></p>
+        </div>
+        
+        <div id="grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+            <!-- Dynamic client grids will be inserted here -->
+        </div>
+        
+        <div class="mt-6 text-center text-sm text-gray-500">
+            <p>Grid shows latest processed frames with bounding boxes. Updates ~every 100ms. Alerts on 5 consecutive detections.</p>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        socket.emit('join_admin');
+        
+        const grid = document.getElementById('grid');
+        const clientCountEl = document.getElementById('client-count');
+        const alertsDiv = document.getElementById('alerts');
+        const alertMsg = document.getElementById('alert-msg');
+        
+        const clients = new Map();  // client_id -> DOM element
+
+        function updateClientDisplay(clientId, data) {
+            let clientDiv = clients.get(clientId);
+            if (!clientDiv) {
+                // Create new client tile
+                clientDiv = document.createElement('div');
+                clientDiv.className = 'bg-white p-4 rounded-lg shadow-md border';
+                clientDiv.id = `client-${clientId}`;
+                clientDiv.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <h2 class="font-semibold text-lg truncate">Client ${clientId.slice(-8)}</h2>
+                        <span id="status-${clientId}" class="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600">Connected</span>
+                    </div>
+                    <img id="img-${clientId}" class="w-full h-48 object-cover rounded mb-2" src="" alt="Stream">
+                    <div class="text-sm space-y-1">
+                        <p id="det-count-${clientId}" class="font-medium text-green-600">Detections: 0 (0 consecutive)</p>
+                        <p id="conf-${clientId}" class="text-gray-500">No recent detections</p>
+                    </div>
+                `;
+                grid.appendChild(clientDiv);
+                clients.set(clientId, clientDiv);
+                updateClientCount();
+            }
+            
+            // Update image - For data URI, no cache-busting query param needed (and it breaks the URI)
+            const img = document.getElementById(`img-${clientId}`);
+            if (data.frame) {
+                img.src = data.frame;  // Direct set for data:image/... base64
+            }
+            
+            // Update detections
+            const detCountEl = document.getElementById(`det-count-${clientId}`);
+            const consecutive = data.consecutive_detections || 0;
+            const totalDets = data.detections ? data.detections.length : 0;
+            detCountEl.textContent = `Detections: ${totalDets} (${consecutive} consecutive)`;
+            detCountEl.className = consecutive >= 5 ? 'font-medium text-red-600' : 'font-medium text-green-600';
+            
+            // Update confidence/details
+            const confEl = document.getElementById(`conf-${clientId}`);
+            if (data.detections && data.detections.length > 0) {
+                const highestConf = Math.max(...data.detections.map(d => d[4]));  // conf is index 4
+                confEl.textContent = `Highest Conf: ${(highestConf * 100).toFixed(1)}%`;
+                confEl.className = 'text-gray-500';
+            } else {
+                confEl.textContent = 'No recent detections';
+                confEl.className = 'text-gray-500 italic';
+            }
+        }
+
+        function updateClientCount() {
+            clientCountEl.textContent = clients.size;
+        }
+
+        // Listen for processed frames
+        socket.on('processed_frame', (data) => {
+            console.log('Received processed_frame for', data.client_id, 'with frame:', !!data.frame);  // Debug log
+            updateClientDisplay(data.client_id, data);
+        });
+
+        // Handle alerts from backend
+        socket.on('alert', (data) => {
+            alertMsg.textContent = `Alert: Object detected in Client ${data.client_id.slice(-8)} for ${data.consecutive} frames!`;
+            alertsDiv.classList.remove('hidden');
+            // Flash effect
+            alertsDiv.style.backgroundColor = '#fef3c7';
+            setTimeout(() => alertsDiv.classList.add('hidden'), 10000);  // Auto-hide after 10s
+        });
+
+        // Handle disconnects (extend backend if needed for emit)
+        setInterval(() => {
+            // Periodic cleanup if no updates for 30s, but omitted for simplicity
+        }, 30000);
+    </script>
+</body>
+</html>
