@@ -1,0 +1,11 @@
+# Update these paths to where YOUR dataset is located
+# train: C:/Users/YourName/fire_detection_system/dataset/images/train
+# val: C:/Users/YourName/fire_detection_system/dataset/images/val
+
+train: D:/Programs/python/yolov8-project/dataset/images/train
+val: D:/Programs/python/yolov8-project/dataset/images/val
+# Number of classes
+nc: 1
+
+# Class names
+names: ['fire and smoke']

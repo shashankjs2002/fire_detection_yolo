@@ -1,0 +1,8 @@
+
+train: D:/Programs/python/yolov8-project/dataset/images/train
+val: D:/Programs/python/yolov8-project/dataset/images/val
+# Number of classes
+nc: 1
+
+# Class names
+names: ['fire and smoke']
